@@ -1,10 +1,9 @@
 package main
 
 import (
-    "time"
     "fmt"
     "os"
-    // "reflect"
+
     "github.com/aws/aws-sdk-go/aws"
     "github.com/aws/aws-sdk-go/aws/credentials"
     "github.com/aws/aws-sdk-go/aws/session"
@@ -14,6 +13,7 @@ import (
 
     "github.com/fmuhic/emailSender/src/message"
     "github.com/fmuhic/emailSender/src/consumer"
+    "github.com/fmuhic/emailSender/src/logging"
     "github.com/fmuhic/emailSender/src/storage"
     "github.com/fmuhic/emailSender/src/email"
     "github.com/fmuhic/emailSender/src/config"
@@ -25,6 +25,8 @@ func main() {
         fmt.Printf("Error while loading config file: %v", configErr)
         os.Exit(1)
     }
+
+	var logger = logging.NewConsoleLogger(appConfig.Logger.ShowDebug)
 
     msgQueue := message.NewMessageQueue()
 
@@ -38,16 +40,9 @@ func main() {
         simpleEmailService,
         msgQueue,
         appConfig.EmailSender,
+        logger,
     )
     go emailService.Run()
-
-
-    go func(mq *message.MessageQueue) {
-        for {
-            fmt.Printf("Queue size is %v\n", mq.Len())
-			time.Sleep(3 * time.Second)
-        }
-    }(msgQueue)
 
     s3Downloader := s3manager.NewDownloader(sess)
     cloudStorage := storage.NewCloudStorage(s3Downloader)

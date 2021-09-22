@@ -10,6 +10,7 @@ type AppConfig struct {
     Aws Aws
     Consumer Consumer
     EmailSender EmailSender
+    Logger Logger
 }
 
 type Aws struct {
@@ -31,6 +32,11 @@ type EmailSender struct {
     IdleDurationInSec int
     MaxMsgsPerSec int
 }
+
+type Logger struct {
+    ShowDebug bool
+}
+
 
 func LoadFromFile(fileName string) (*AppConfig, error) {
     jsonFile, openErr := os.Open(fileName)

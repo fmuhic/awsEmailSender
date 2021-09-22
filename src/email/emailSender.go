@@ -1,16 +1,15 @@
 package email
 
 import (
-    "fmt"
     "time"
     "sync"
-    // "math/rand"
 
     "github.com/aws/aws-sdk-go/aws"
     "github.com/aws/aws-sdk-go/service/ses"
     "github.com/aws/aws-sdk-go/aws/awserr"
 
     "github.com/fmuhic/emailSender/src/message"
+    "github.com/fmuhic/emailSender/src/logging"
     "github.com/fmuhic/emailSender/src/config"
 )
 
@@ -18,14 +17,19 @@ type EmailSender struct {
     sesClient *ses.SES
     messages *message.MessageQueue
     config config.EmailSender
+	logger logging.Logger
 }
 
-func NewEmailSender(s *ses.SES, mq *message.MessageQueue, config config.EmailSender) *EmailSender {
-    return &EmailSender{
-        sesClient: s,
-        messages: mq,
-        config: config,
-    }
+func NewEmailSender(s *ses.SES,
+	mq *message.MessageQueue,
+	config config.EmailSender,
+	logger logging.Logger) *EmailSender {
+	return &EmailSender{
+		sesClient: s,
+		messages:  mq,
+		config:    config,
+		logger:    logger,
+	}
 }
 
 func (es *EmailSender) Run() {
@@ -42,14 +46,13 @@ func (es *EmailSender) Run() {
             wg.Wait()
 
             elapsed := time.Since(start).Milliseconds()
-            fmt.Printf("Message batch took %v ms\n", elapsed)
+			es.logger.Debug("Message batch took %v ms to send", elapsed)
 
             if 1000 - elapsed > 0 {
-                fmt.Printf("Email Sender: sleeping for %v ms\n", 1000 - elapsed)
                 time.Sleep(time.Duration(1000 - elapsed) * time.Millisecond)
             }
         } else {
-            fmt.Println("Email Sender: No emails to send, idling ...")
+			es.logger.Debug("No emails to send")
 			time.Sleep(time.Duration(es.config.IdleDurationInSec) * time.Second)
 		}
     }
@@ -78,38 +81,26 @@ func (es *EmailSender) sendEmail(msg *message.SQSMessage, wg *sync.WaitGroup) {
         Source: aws.String(msg.From),
     }
 
-    result, err := es.sesClient.SendEmail(input)
+    _, err := es.sesClient.SendEmail(input)
 
-    if err != nil {
-        if aerr, ok := err.(awserr.Error); ok {
-            switch aerr.Code() {
+	if err != nil {
+		errorMsg := "Unable to send email: " + err.Error()
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
                 case ses.ErrCodeMessageRejected:
-                    fmt.Println(ses.ErrCodeMessageRejected, aerr.Error())
+                    errorMsg = ses.ErrCodeMessageRejected + ": " + aerr.Error()
                 case ses.ErrCodeMailFromDomainNotVerifiedException:
-                    fmt.Println(ses.ErrCodeMailFromDomainNotVerifiedException, aerr.Error())
+                    errorMsg = ses.ErrCodeMailFromDomainNotVerifiedException + ": " + aerr.Error()
                 case ses.ErrCodeConfigurationSetDoesNotExistException:
-                    fmt.Println(ses.ErrCodeConfigurationSetDoesNotExistException, aerr.Error())
+                    errorMsg = ses.ErrCodeConfigurationSetDoesNotExistException + ": " + aerr.Error()
                 default:
-                    fmt.Println(aerr.Error())
-            }
-        } else {
-            fmt.Println(err.Error())
-        }
+                    errorMsg = "SES error: " + aerr.Error()
+			}
+		}
 
-        return
-    }
+		es.logger.Error(errorMsg)
+		return
+	}
 
-    fmt.Println("Email Sent: " + msg.TemplateName)
-    fmt.Println(result)
+	es.logger.Info("Email sent: " + msg.TemplateName)
 }
-
-// Simulate Email sending process
-// func (es *EmailSender) sendEmail(msg *message.SQSMessage, wg *sync.WaitGroup) {
-    // defer wg.Done()
-
-    // rand.Seed(time.Now().UnixNano())
-    // n := rand.Intn(400)
-    // time.Sleep(time.Duration(n)*time.Millisecond)
-    // fmt.Printf("Email sent. Process took %v ms\n", n)
-// }
-

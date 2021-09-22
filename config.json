@@ -4,7 +4,7 @@
         "region": "eu-central-1"
     },
     "consumer": {
-        "queueUrl": "https://sqs.eu-central-1.amazonaws.com/233918758452/email_service_queue_qa",
+        "queueUrl": "Queue URL",
         "queueMaxMsgsPerRequest": 10,
         "msgVisibilitySec": 20,
         "longPollingDurationSec": 10,
@@ -15,5 +15,8 @@
     "emailSender": {
         "maxMsgsPerSec": 1,
         "idleDurationInSec": 3
+    },
+    "logger": {
+        "showDebug": true
     }
 }
