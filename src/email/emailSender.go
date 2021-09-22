@@ -41,7 +41,7 @@ func (es *EmailSender) Run() {
             var wg sync.WaitGroup
             for _, msg := range msgs {
                 wg.Add(1)
-                go es.sendEmail(msg, &wg)
+                go es.sendEmail(msg.(*message.SQSMessage), &wg)
             }
             wg.Wait()
 
