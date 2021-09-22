@@ -18,7 +18,7 @@ type Consumer struct {
     messages *message.MessageQueue
     storage *storage.CloudStorage
     config config.Consumer
-	logger logging.Logger
+    logger logging.Logger
 }
 
 func NewConsumer(sqsClient *sqs.SQS,
@@ -31,7 +31,7 @@ func NewConsumer(sqsClient *sqs.SQS,
         messages: messageQueue,
         storage: storage,
         config: config,
-		logger: logger,
+        logger: logger,
     }
 }
 
@@ -46,30 +46,30 @@ func (c *Consumer) Run() {
     for {
         if c.messages.Len() > c.config.MaxMsgQueueSize {
             c.logger.Debug("Queue full")
-			time.Sleep(time.Second)
+            time.Sleep(time.Second)
             continue
         }
 
-		msgRequest := &sqs.ReceiveMessageInput{
-			MaxNumberOfMessages: aws.Int64(c.config.QueueMaxMsgsPerRequest),
-			QueueUrl: aws.String(c.config.QueueUrl),
-			VisibilityTimeout: aws.Int64(c.config.MsgVisibilitySec),
-			WaitTimeSeconds: aws.Int64(c.config.LongPollingDurationSec),
-		}
-		msgResponse, responseErr := c.sqsClient.ReceiveMessage(msgRequest)
+        msgRequest := &sqs.ReceiveMessageInput{
+            MaxNumberOfMessages: aws.Int64(c.config.QueueMaxMsgsPerRequest),
+            QueueUrl: aws.String(c.config.QueueUrl),
+            VisibilityTimeout: aws.Int64(c.config.MsgVisibilitySec),
+            WaitTimeSeconds: aws.Int64(c.config.LongPollingDurationSec),
+        }
+        msgResponse, responseErr := c.sqsClient.ReceiveMessage(msgRequest)
 
         if responseErr != nil {
             c.logger.Error("Msg response error: %v", responseErr)
         }
 
-		for _, msg := range msgResponse.Messages {
+        for _, msg := range msgResponse.Messages {
             msgChan <- msg
-		}
+        }
 
-		if len(msgResponse.Messages) < 1 {
-			c.logger.Debug("No messages in queue")
-			time.Sleep(time.Second)
-		}
+        if len(msgResponse.Messages) < 1 {
+            c.logger.Debug("No messages in queue")
+            time.Sleep(time.Second)
+        }
     }
 }
 
@@ -97,12 +97,12 @@ func (c *Consumer) processMessage(sqsMsg *sqs.Message) {
     msg.Template = &content
     c.messages.Push(&msg)
 
-	deleteRequest := &sqs.DeleteMessageInput{
+    deleteRequest := &sqs.DeleteMessageInput{
         QueueUrl: aws.String(c.config.QueueUrl),
-		ReceiptHandle: sqsMsg.ReceiptHandle,
-	}
+        ReceiptHandle: sqsMsg.ReceiptHandle,
+    }
 
-	_, err := c.sqsClient.DeleteMessage(deleteRequest)
+    _, err := c.sqsClient.DeleteMessage(deleteRequest)
     if err != nil {
         c.logger.Error("Error while deleting SQS message: %v", err)
     }

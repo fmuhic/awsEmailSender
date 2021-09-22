@@ -26,9 +26,9 @@ func main() {
         os.Exit(1)
     }
 
-	var logger = logging.NewConsoleLogger(appConfig.Logger.ShowDebug)
+    var logger = logging.NewConsoleLogger(appConfig.Logger.ShowDebug)
 
-	msgQueue := message.NewMessageQueue(128)
+    msgQueue := message.NewMessageQueue(128)
 
     sess, _ := session.NewSession(&aws.Config{
         Region: aws.String(appConfig.Aws.Region),
