@@ -1,7 +1,6 @@
 package consumer
 
 import (
-    "fmt"
     "time"
     "encoding/json"
 
@@ -9,6 +8,7 @@ import (
     "github.com/aws/aws-sdk-go/service/sqs"
 
     "github.com/fmuhic/emailSender/src/message"
+    "github.com/fmuhic/emailSender/src/logging"
     "github.com/fmuhic/emailSender/src/storage"
     "github.com/fmuhic/emailSender/src/config"
 )
@@ -18,21 +18,26 @@ type Consumer struct {
     messages *message.MessageQueue
     storage *storage.CloudStorage
     config config.Consumer
+	logger logging.Logger
 }
 
 func NewConsumer(sqsClient *sqs.SQS,
                  messageQueue *message.MessageQueue,
                  storage *storage.CloudStorage,
-                 config config.Consumer) *Consumer {
+                 config config.Consumer,
+                 logger logging.Logger) *Consumer {
     return &Consumer{
         sqsClient: sqsClient,
         messages: messageQueue,
         storage: storage,
         config: config,
+		logger: logger,
     }
 }
 
 func (c *Consumer) Run() {
+    c.logger.Debug("Starting consumer")
+
     msgChan := make(chan *sqs.Message)
     for workerId := 0; workerId <= c.config.WorkerCount; workerId++ {
         go c.consume(workerId, msgChan)
@@ -40,7 +45,7 @@ func (c *Consumer) Run() {
 
     for {
         if c.messages.Len() > c.config.MaxMsgQueueSize {
-            fmt.Println("Queue full, Sleeping ...")
+            c.logger.Debug("Queue full")
 			time.Sleep(time.Second)
             continue
         }
@@ -51,14 +56,18 @@ func (c *Consumer) Run() {
 			VisibilityTimeout: aws.Int64(c.config.MsgVisibilitySec),
 			WaitTimeSeconds: aws.Int64(c.config.LongPollingDurationSec),
 		}
-		msgResponse, _ := c.sqsClient.ReceiveMessage(msgRequest)
+		msgResponse, responseErr := c.sqsClient.ReceiveMessage(msgRequest)
+
+        if responseErr != nil {
+            c.logger.Error("Msg response error: %v", responseErr)
+        }
 
 		for _, msg := range msgResponse.Messages {
             msgChan <- msg
 		}
 
 		if len(msgResponse.Messages) < 1 {
-			fmt.Println("No messages on queue, Idling ...")
+			c.logger.Debug("No messages in queue")
 			time.Sleep(time.Second)
 		}
     }
@@ -66,7 +75,7 @@ func (c *Consumer) Run() {
 
 func (c *Consumer) consume(workerId int, msgChan <-chan *sqs.Message) {
     for sqsMsg := range msgChan {
-        fmt.Printf("Worker %v is processing message\n", workerId)
+        c.logger.Debug("Worker %v is processing message", workerId)
         c.processMessage(sqsMsg)
     }
 }
@@ -75,14 +84,14 @@ func (c *Consumer) processMessage(sqsMsg *sqs.Message) {
     var msg message.SQSMessage
     decodeErr := json.Unmarshal([]byte(*sqsMsg.Body), &msg)
     if decodeErr != nil {
-        fmt.Println("Error while decoding msg ", decodeErr.Error())
-        // return
+        c.logger.Error("Error while decoding SQS msg: " + decodeErr.Error())
+        return
     }
 
     content, fetchErr := c.storage.Read(msg.S3BucketName, msg.TemplateName)
     if fetchErr != nil {
-        fmt.Println("Error while fetching template ", fetchErr.Error())
-        // return
+        c.logger.Error("Error while fetching template from S3: " + fetchErr.Error())
+        return
     }
 
     msg.Template = &content
@@ -95,6 +104,6 @@ func (c *Consumer) processMessage(sqsMsg *sqs.Message) {
 
 	_, err := c.sqsClient.DeleteMessage(deleteRequest)
     if err != nil {
-        fmt.Println("Error while deleting message ", err)
+        c.logger.Error("Error while deleting SQS message: %v", err)
     }
 }
